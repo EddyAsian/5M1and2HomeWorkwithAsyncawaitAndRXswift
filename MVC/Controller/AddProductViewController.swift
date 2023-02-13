@@ -44,14 +44,10 @@ class AddProductViewController: UIViewController {
     }
     
     private func configurePostingProductsData(model: ProductModel) {
-        NetworkLayer.shared.postProductsData(model: model) { result in
-            switch result {
-            case .success(_):
-                DispatchQueue.main.async {
-                    self.succesfulPostingDataAlert()
-                }
-            case .failure(let error):
-                print("ERROR: \(error.localizedDescription)")
+        Task {
+            let data = try await NetworkLayer.shared.postProductsData()
+            if !data.isEmpty {
+                succesfulPostingDataAlert()
             }
         }
     }
@@ -78,3 +74,4 @@ class AddProductViewController: UIViewController {
         present(alert, animated: true)
     }
 }
+

@@ -4,18 +4,16 @@
 //
 //  Created by Eldar on 4/1/23.
 //
-//Дз:
-//Прочитать про async await https://docs.swift.org/swift-book/LanguageGuide/Concurrency.html
-//Изменить запросы get на async await:
-// get-  это когда мы стягиваем, получаем данные с апишки сервера к нему относятся:
-//fetch- стягивать, получать, decoder
-//findProdutsData- получаем данные по правилу Search( ищем и получаем данные)
-//fetchProductsData, searchTakeawaysData - также заменен по методу на async await
-//decodeData- также заменен по методу на async await
-
-
+//домашка №2 В верстку подвязать RxSwift
+//Все запросы кроме GET поменять на async await
+//GET запрос написать на RX
 
 import UIKit
+import RxSwift
+
+//Все запросы кроме GET поменять на async await
+//GET запрос написать на RX
+
 
 final class NetworkLayer {
     
@@ -28,8 +26,7 @@ final class NetworkLayer {
         var orderTypeModelArray = [OrderTypeModel]()
         let orderTypeData = Data(json.utf8)
         let jsonDecoder = JSONDecoder()
-        do { let orderTypeModelData = try jsonDecoder
-            .decode([OrderTypeModel].self, from: orderTypeData)
+        do { let orderTypeModelData = try jsonDecoder.decode([OrderTypeModel].self, from: orderTypeData)
             orderTypeModelArray = orderTypeModelData
         } catch {
             print(error.localizedDescription)
@@ -37,123 +34,93 @@ final class NetworkLayer {
         return orderTypeModelArray
     }
     
-    // GET request changed to async
-    func fetchProductsData() async throws -> MainProductModel {
-        let (data, _) = try await URLSession.shared.data(from: baseURL)
-        return await decodeData(data: data)
+    //GET request changed to RxSwift
+    func fetchProductsData() -> Observable<[ProductModel]> {
+        return Observable<[ProductModel]>.create { [unowned self] observer in
+            let task = URLSession.shared.dataTask(with: self.baseURL) { data, _, _ in
+                do {
+                    guard let data = data else { return }
+                    let model = try JSONDecoder().decode(MainProductModel.self, from: data)
+                    observer.onNext(model.products)
+                } catch {
+                    observer.onError(error)
+                }
+                observer.onCompleted()
+            }
+            task.resume()
+            return Disposables.create {
+                task.cancel()
+            }
+        }
     }
     
-    // find changed to async
-    func findProductsData(
-        text: String
-    ) async throws -> MainProductModel {
-        let urlQueryItem = URLQueryItem(name: "q", value: text)
-        let request = URLRequest(url: baseURL.appendingPathComponent("search")
-            .appending(queryItems: [urlQueryItem]))
-        
-        let (data, _) = try await URLSession.shared.data(for: request)
-        return await decodeData(data: data)
+    func findProductsData(text: String) -> Observable<[ProductModel]> {
+        return Observable<[ProductModel]>.create { [unowned self] observer in
+            let urlQueryItem = URLQueryItem(name: "q", value: text)
+            let request = URLRequest(
+                url: self.baseURL.appendingPathComponent("search")
+                    .appending(
+                        queryItems: [urlQueryItem]
+                    )
+            )
+            Task {
+                let (data, _) = try await URLSession.shared.data(for: request)
+                do {
+                    let model = try JSONDecoder().decode(MainProductModel.self, from: data)
+                    observer.onNext(model.products)
+                } catch {
+                    observer.onError(error)
+                }
+                observer.onCompleted()
+            }
+            return Disposables.create {
+                observer.onCompleted()
+            }
+        }
     }
     
-    func decodeData <T: Decodable>(data: Data) async -> T  {
-        let decoder = JSONDecoder()
-        return try! decoder.decode(T.self, from: data)
+    //Encode changed to async
+    func encode<T: Encodable>(data: T) throws -> Data {
+        let encoder = JSONEncoder()
+        return try encoder.encode(data)
     }
     
-    func postProductsData(
-        model: ProductModel, completion: @escaping (Result<Data, Error>
-        ) -> Void) {
+    //Post changed to async
+    func postProductsData() async throws -> Data {
         var encodedProductModel: Data?
-        encodedProductModel = initializeData(product: encodedProductModel)
-        guard encodedProductModel != nil else { return }
-        
-        var request = URLRequest(url: baseURL.appendingPathComponent("add"))
+        encodedProductModel = try encode(data: encodedProductModel)
+        var request = URLRequest(
+            url: baseURL.appendingPathComponent("add")
+        )
         request.httpMethod = "POST"
         request.httpBody = encodedProductModel
-        
-        let task = URLSession.shared.dataTask(with: request) { data, response, error in
-            if let error = error {
-                completion(.failure(error))
-            }
-            print("RESPONSE:\(String(describing: response))")
-            guard let data = data else { return }
-            completion(.success(data))
-        }
-        task.resume()
+        let (data, _) = try await URLSession.shared.data(for: request)
+        return data
     }
     
-    func putProductsData(
-        id:Int, model: ProductModel, completion: @escaping (Result<Data, Error>
-        ) -> Void) {
+    //Put changed to async
+    func putAsync(id: Int) async throws -> Data {
         var encodedProductModel: Data?
-        encodedProductModel = initializeData(product: encodedProductModel)
-        guard encodedProductModel != nil else { return }
-        
-        var request = URLRequest(url: baseURL.appendingPathComponent("\(id)"))
+        encodedProductModel = try encode(data: encodedProductModel)
+        var request = URLRequest(
+            url: baseURL.appendingPathComponent("\(id)")
+        )
         request.httpMethod = "PUT"
         request.httpBody = encodedProductModel
-        
-        let task = URLSession.shared.dataTask(with: request) { data, response, error in
-            if let error = error {
-                completion(.failure(error))
-            }
-            print("RESPONSE:\(String(describing: response))")
-            guard let data = data else { return }
-            completion(.success(data))
-        }
-        task.resume()
+        let (data, _) = try await URLSession.shared.data(for: request)
+        return data
     }
     
-    func deleteProductsData(
-        id: Int, completion: @escaping (Result<Data, Error>
-        ) -> Void) {
-        var request = URLRequest(url: baseURL.appendingPathComponent("\(id)"))
+    //Delete changed to async
+    func deleteProductsData(id: Int) async throws -> Data {
+        var request = URLRequest(
+            url: baseURL.appendingPathComponent("\(id)")
+        )
         request.httpMethod = "DELETE"
-        
-        let task = URLSession.shared.dataTask(with: request) { data, response, error in
-            if let error = error {
-                completion(.failure(error))
-            }
-            print("RESPONSE:\(String(describing: response))")
-        }
-        task.resume()
-    }
-    
-    func decodeData<T: Decodable>(
-        data: Data, completion: @escaping (Result<T, Error>
-        ) -> Void) {
-        let decoder = JSONDecoder()
-        do {
-            let decodedData = try decoder.decode(T.self, from: data)
-            completion(.success(decodedData))
-        } catch {
-            completion(.failure(error))
-        }
-    }
-    
-    func encodeData<T: Encodable>(
-        product: T, completion: @escaping (Result<Data, Error>
-        ) -> Void) {
-        let encoder = JSONEncoder()
-        do {
-            let encodedData = try encoder.encode(product)
-            completion(.success(encodedData))
-        } catch {
-            completion(.failure(error))
-        }
-    }
-    
-    private func initializeData<T: Encodable>(product: T) -> Data? {
-        var encodedData: Data?
-        encodeData(product: product) { result in
-            switch result {
-            case .success(let model):
-                encodedData = model
-            case .failure(let error):
-                print(error.localizedDescription)
-            }
-        }
-        return encodedData
+        let (data, _) = try await URLSession.shared.data(for: request)
+        print("Data \(data) is deleted")
+        return data
     }
 }
+
 

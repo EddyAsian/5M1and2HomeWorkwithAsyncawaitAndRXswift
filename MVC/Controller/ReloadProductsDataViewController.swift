@@ -2,7 +2,7 @@
 //  ReloadProductsDataViewController.swift
 //  Homework4.4
 //
-//  Created by Zhansuluu Kydyrova on 15/1/23.
+//  Created by Eldar on 15/1/23.
 //
 
 import UIKit
@@ -45,18 +45,19 @@ class ReloadProductsDataViewController: UIViewController {
     }
     
     private func putProductsData(model: ProductModel) {
-        NetworkLayer.shared.putProductsData(
-            id: Int(idTextField.text!
-                   )!, model: model) { result in
-                       switch result {
-                       case .success(_):
-                           DispatchQueue.main.async {
-                               self.succesfulReloadingDataAlert()
-                           }
-                       case .failure(let error):
-                           print("ERROR: \(error.localizedDescription)")
-                       }
-                   }
+        guard let id = Int(idTextField.text!) else {
+            showAlert()
+            return
+        }
+        
+        Task {
+            let data = try await NetworkLayer.shared.putAsync(id: id)
+            if !data.isEmpty {
+                self.succesfulReloadingDataAlert()
+            } else {
+                print("Not success while trying to reload data")
+            }
+        }
     }
     
     private func showAlert() {
@@ -81,3 +82,4 @@ class ReloadProductsDataViewController: UIViewController {
         present(alert, animated: true)
     }
 }
+
