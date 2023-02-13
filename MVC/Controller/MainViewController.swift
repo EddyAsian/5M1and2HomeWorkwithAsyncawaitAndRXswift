@@ -4,22 +4,21 @@
 //
 //  Created by Eldar on 1/1/23.
 //
-//Дз:
-//Прочитать про async await https://docs.swift.org/swift-book/LanguageGuide/Concurrency.html
-//Изменить запросы get на async await:
-// get-  это когда мы стягиваем, получаем данные с апишки сервера к нему относятся:
-//fetch- стягивать, получать, decoder
-//findProdutsData- получаем данные по правилу Search( ищем и получаем данные)
-//fetchProductsData, searchTakeawaysData - также заменен по методу на async await
-//decodeData- также заменен по методу на async await
+//домашка №2 В верстку подвязать RxSwift
+//Все запросы кроме GET поменять на async await
+//GET запрос написать на RX
 
 import UIKit
+import RxSwift
+import RxCocoa
 
 class MainViewController: UIViewController {
     
     @IBOutlet private weak var orderMethodCollectionView: UICollectionView!
     @IBOutlet private weak var orderTypeCollectionView: UICollectionView!
     @IBOutlet private weak var takeawaysTableview: UITableView!
+    
+    private let disposeBag = DisposeBag()
     
     private var orderMethodArray = [
         OrderMethodModel(name: "Delivery", img: UIImage(systemName: "car")!, isSelected: false),
@@ -37,17 +36,18 @@ class MainViewController: UIViewController {
     }
     
     private var filteredTakeAways = [ProductModel]()
+    private var products: Observable<[ProductModel]>?
+    private var smartphonesArray = [ProductModel]()
+    private var laptopsArray = [ProductModel]()
+    private var fragrancesArray = [ProductModel]()
+    private var groceriesArray = [ProductModel]()
+    private var homeDecorationArray = [ProductModel]()
+    private var skincareArray = [ProductModel]()
     
     override func viewDidLoad() {
         super.viewDidLoad()
         configureData()
-        Task {
-            do {
-                try await configureTakeawaysDataArray()
-            } catch {
-                print("Error")
-            }
-        }
+        configureTakeawaysDataArray()
         orderTypeArray = NetworkLayer.shared.decodeOrderTypeData(json)
     }
 }
@@ -135,12 +135,8 @@ extension MainViewController: UITableViewDataSource {
             withIdentifier: TakeawaysTableViewCell.tableViewCellReuseID,
             for: indexPath
         ) as? TakeawaysTableViewCell else { fatalError() }
-        
         let product = filteredTakeAways[indexPath.row]
         cell.displayInfo(product)
-        cell.imageTapped = { productTitle in
-            print("Our product is: \(productTitle)")
-        }
         return cell
     }
 }
@@ -166,10 +162,12 @@ extension MainViewController: UITableViewDelegate {
 }
 
 extension MainViewController {
-    private func configureTakeawaysDataArray() async throws {
-        self.takeAways = try await NetworkLayer.shared.fetchProductsData().products
-        DispatchQueue.main.async {
-            self.takeawaysTableview.reloadData()
+    private func configureTakeawaysDataArray() {
+        self.products = NetworkLayer.shared.fetchProductsData()
+        Task {
+            if let productsArray = try await products?.toArray().value.first {
+                self.takeAways = productsArray
+            }
         }
     }
     
@@ -186,8 +184,9 @@ extension MainViewController {
             UINib(nibName: String(describing: OrderTypeCollectionViewCell.self), bundle: nil),
             forCellWithReuseIdentifier: OrderTypeCollectionViewCell.reuseID)
         
-        takeawaysTableview.dataSource = self
         takeawaysTableview.delegate = self
+        takeawaysTableview.dataSource = self
+        
         takeawaysTableview.register(
             UINib(nibName: String(describing: TakeawaysTableViewCell.self), bundle: nil),
             forCellReuseIdentifier: TakeawaysTableViewCell.tableViewCellReuseID)
@@ -197,14 +196,11 @@ extension MainViewController {
         let id = takeAways[indexPath.row].id
         deleteTakeaways(by: id)
         takeAways.remove(at: indexPath.row)
-        takeawaysTableview.deleteRows(at: [indexPath], with: .automatic)
     }
     
     private func deleteTakeaways(by id: Int) {
-        NetworkLayer.shared.deleteProductsData(id: id) { result in
-            if case .failure(let error) = result {
-                print(error.localizedDescription)
-            }
+        Task {
+            try await NetworkLayer.shared.deleteProductsData(id: id)
         }
     }
     
@@ -213,3 +209,4 @@ extension MainViewController {
         filteredTakeAways = takeAways.filter { $0.category == category }
     }
 }
+

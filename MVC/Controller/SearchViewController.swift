@@ -6,6 +6,8 @@
 //
 
 import UIKit
+import RxSwift
+import RxCocoa
 
 class SearchViewController: UIViewController {
     
@@ -17,6 +19,9 @@ class SearchViewController: UIViewController {
             productsTableView.reloadData()
         }
     }
+    
+    private let disposeBag = DisposeBag()
+    private var filteredProductsObservable: Observable<[ProductModel]>?
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -30,14 +35,14 @@ class SearchViewController: UIViewController {
             UINib(nibName: String(describing: TakeawaysTableViewCell.self),bundle: nil),
             forCellReuseIdentifier: TakeawaysTableViewCell.tableViewCellReuseID
         )
-        
         searchBar.delegate = self
     }
     
     private func searchTakeawaysData(text: String) {
+        filteredProductsObservable = NetworkLayer.shared.findProductsData(text: text)
         Task {
-            let productsList = try await NetworkLayer.shared.findProductsData(text: text)
-            self.filteredProducts = productsList.products
+            guard let filteredData = try await filteredProductsObservable?.toArray().value.first else { return }
+            filteredProducts = filteredData
         }
     }
 }
@@ -83,3 +88,4 @@ extension SearchViewController: UISearchBarDelegate {
         searchTakeawaysData(text: searchText)
     }
 }
+
